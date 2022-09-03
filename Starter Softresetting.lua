@@ -1,11 +1,8 @@
-local AtkDef, SpeSpc
-
 --- This snippet checks region and sets the partySizeAddress accordingly
 
-local gameVer = emu:read8(0x141)
-local gameReg = emu:read8(0x142)
+gameVer = emu:read8(0x141)
+gameReg = emu:read8(0x142)
 
-local partySizeAddress
 
 if gameVer == 0x54 then
   if gameReg == 0x44 or gameReg == 0x46 or gameReg == 0x49 or gameReg == 0x53 then
@@ -40,7 +37,9 @@ end
 
 
 
-function checkShiny(atkDef, speSpc) -- Checks if the Pokémon is shiny
+function checkShiny(targetAddress) -- Checks if the Pokémon is shiny
+  atkDef = emu:read8(targetAddress + 0x15)
+  speSpc = emu:read8(targetAddress + 0x16)
   if speSpc == 0xAA then
     if  atkDef == 0x2A or  atkDef == 0x3A or  atkDef == 0x6A or  atkDef == 0x7A or  atkDef == 0xAA or  atkDef == 0xBA or  atkDef == 0xEA or  atkDef == 0xFA then
       return true
@@ -51,60 +50,44 @@ end
 
 --- This code is more specifically tailored for this script
 originalPartySize = emu:read8(partySizeAddress)
-local partySize = originalPartySize
+partySize = originalPartySize
 if originalPartySize >= 6 then
   console:log("No Party Slot Available!")
 end
-local attempts = 0
-targetAddress = partySizeAddress + (partySize * 0x30) + 1
 
-console:log("originalPartySize: "..originalPartySize)
+targetAddress = partySizeAddress + (partySize * 0x30) + 1 -- Sets the address of the target pokemon based on party size when activating the script
+
+attemptString = "Number of attempts: %d"
+attemptBuffer = console:createBuffer("Attempts")
+attempts = 0
+
+function attemptCounter() -- Tracks your attempts and prints them to a text buffer
+  attempts = attempts + 1
+  attemptText = string.format(attemptString, attempts)
+  attemptBuffer:moveCursor(0,0)
+  attemptBuffer:print(attemptText)
+end
+
+
 
 function activeHunt()
-  while true do
-
-    while partySize == originalPartySize do
+  partySize = emu:read8(partySizeAddress)
+  if partySize ~= (originalPartySize + 1) then
+    if emu:currentFrame() % 8 == 0 then
       emu:addKey(0)
-      emu:runFrame()
+    elseif emu:currentFrame() % 8 == 4 then
       emu:clearKey(0)
-      emu:runFrame()
-      partySize = emu:read8(partySizeAddress)
     end
-
-    atkDef = emu:read8(targetAddress + 0x15)
-    speSpc = emu:read8(targetAddress + 0x16)
-
-    if checkShiny(AtkDef, SpeSpc) then
+  else
+    if checkShiny(targetAddress) then
       console:log("Shiny Found! Terminating Script.")
-      return true
+      callbacks:remove(attemptCBID)
     else
-      attempts = attempts + 1
-      console:log("Discarding. Attempts: "..attempts)
+      attemptCounter()
       emu:reset()
     end
   end
 end
 
-function activeHunt()
-  while true do
-    while partySize == originalPartySize do
-      emu:addKey(0)
-      emu:runFrame()
-      emu:clearKey(0)
-      emu:runFrame()
-      partySize = emu:read8(partySizeAddress)
-    end
-    atkDef = emu:read8(targetAddress + 0x15)
-    speSpc = emu:read8(targetAddress + 0x16)
-    if checkShiny(AtkDef, SpeSpc) then
-      console:error("Shiny Found! Terminating Script.")
-      return
-    else
-      attempts = attempts + 1
-      console:log("Discarding. Attempts: " + toString(attempts))
-      emu:reset()
-    end
-  end
-end
-
-activeHunt()
+--attemptCBID = callbacks:add("reset",attemptCounter)
+huntCBID = callbacks:add("frame",activeHunt)
