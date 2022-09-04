@@ -1,4 +1,4 @@
---- This snippet checks region and sets the partySizeAddress accordingly
+--- This snippet checks game region and version and sets the partySizeAddress accordingly
 
 gameVer = emu:read8(0x141)
 gameReg = emu:read8(0x142)
@@ -49,6 +49,7 @@ function checkShiny(targetAddress) -- Checks if the Pokémon is shiny
 end
 
 
+-- Prints out the stats of all the pokemon seen. Useful to diagnose whether the script is working or not.
 statsBuffer = console:createBuffer("IVs")
 function statViewer(targetAddress)
   local atkDef = emu:read8(targetAddress + 21)
@@ -70,13 +71,16 @@ if originalPartySize >= 6 then
   console:log("No Party Slot Available!")
 end
 
+
 targetAddress = partySizeAddress + (originalPartySize * 0x30) + 8 -- Sets the address of the target pokemon based on party size when activating the script
 console:log(targetAddress.."")
 
+-- Necessary variables for the attemptcounter
 attemptString = "Number of attempts: %d"
 attemptBuffer = console:createBuffer("Attempts")
 attempts = 0
 
+-- Simply prints the attempts to a buffer
 function attemptCounter() -- Tracks your attempts and prints them to a text buffer
   attempts = attempts + 1
   attemptText = string.format(attemptString, attempts)
@@ -87,23 +91,23 @@ end
 frameDelay = 0
 
 function activeHunt()
-  if frameDelay == 0 then
-    partySize = emu:read8(partySizeAddress)
-    if partySize ~= (originalPartySize + 1) then
-      lastFrame = emu:currentFrame()
-      if emu:currentFrame() % 8 == 0 then
+  if frameDelay == 0 then -- Makes the RNG advance between SRs
+    partySize = emu:read8(partySizeAddress) -- Updates Partysize every frame
+    if partySize ~= (originalPartySize + 1) then -- Detects a change in partysize
+      lastFrame = emu:currentFrame() -- This just marks the last frame of the partysize being constant, giving a measure of time further down
+      if emu:currentFrame() % 8 == 0 then -- This block just mashes the A button in bursts of 4 frames on and off.
         emu:addKey(0)
       elseif emu:currentFrame() % 8 == 4 then
         emu:clearKey(0)
       end
     else
-      if emu:currentFrame() >= lastFrame + 4 then
-        if checkShiny(targetAddress) then
+      if emu:currentFrame() >= lastFrame + 4 then -- This line is here to give a delay between the partysize updating and reading the stats, it was giving me blank stats w/o it.
+        if checkShiny(targetAddress) then -- This block just terminates everything when a shiny is found
           emu:clearKey(0)
           console:log("Shiny Found! Terminating Script.")
           callbacks:remove(huntCBID)
-        else
-          frameDelay = 8
+        else -- Resets everything and updates stats for the next reset.
+          frameDelay = 8 -- Framedelay to not reset multiple times on the same rng frame
           emu:clearKey(0)
           statViewer(targetAddress)
           attemptCounter()
@@ -117,5 +121,5 @@ function activeHunt()
   end
 end
 
-emu:saveStateSlot(3,15)
-huntCBID = callbacks:add("frame",activeHunt)
+emu:saveStateSlot(3,15) -- Savestate created beforehand to get the loop up and running
+huntCBID = callbacks:add("frame",activeHunt) -- Runs activeHunt() every frame
